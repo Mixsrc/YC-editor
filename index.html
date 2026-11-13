@@ -3152,7 +3152,8 @@ window.ycWeb = (function () {
   const TYPES = { '.y0l': 'Live Set All File', '.y0p': 'Live Set Page File', '.y0s': 'Live Set Sound File', '.zip': 'ZIP File', '.syx': 'SysEx File' };
   const typeOf = (exts) => (exts.length === 1 ? (TYPES[exts[0]] || exts[0].slice(1).toUpperCase() + ' File') : 'YC Files') + ' (' + exts.map((x) => '*' + (x === '.zip' || x === '.syx' ? x : x.toUpperCase())).join(';') + ')';
   const extsOf = (filters) => (filters || []).flatMap((f) => f.extensions || []).map((x) => '.' + String(x).toLowerCase()).filter((x, i, a) => a.indexOf(x) === i);
-  /* enregistrer : fenêtre « Save As » simulée, puis vrai téléchargement ; le fichier rejoint le dossier simulé */
+  /* enregistrer : fenêtre « Save As » simulée ; le fichier rejoint seulement le dossier simulé (pas de vrai téléchargement :
+     un navigateur réglé sur « demander où enregistrer » ouvrirait sa propre fenêtre en plus) */
   async function saveAs(defaultName, filters, blob) {
     const exts = extsOf(filters).length ? extsOf(filters) : [extOf(defaultName)];
     const name = await explorer({ mode: 'save', exts, typeName: typeOf(exts), defaultName });
@@ -3160,7 +3161,7 @@ window.ycWeb = (function () {
     const bytes = new Uint8Array(await blob.arrayBuffer()), old = folder.findIndex((f) => f.name.toLowerCase() === name.toLowerCase());
     const f = { name, ext: extOf(name), size: bytes.length, date: Date.now(), bytes: () => bytes };
     if (old >= 0) folder[old] = f; else folder.push(f);
-    return download(blob, name);
+    return name;
   }
   /* compléments de l'objet `sys` du mode navigateur */
   function sys(base) {
