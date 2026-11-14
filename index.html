@@ -11108,16 +11108,6 @@ window.YC_I18N_DATA = {
 "k": "M"
 },
 {
-"fr": "Clic : passer sur votre YC branché en USB (Chrome, Edge), le son en cours seulement",
-"g": "messages",
-"en": "Click: switch to your YC connected via USB (Chrome, Edge), current sound only",
-"de": "Klick: zu Ihrem per USB angeschlossenen YC wechseln (Chrome, Edge), nur der aktuelle Sound",
-"es": "Clic: pasar a tu YC conectado por USB (Chrome, Edge), solo el sonido actual",
-"it": "Clic: passa al tuo YC collegato via USB (Chrome, Edge), solo il suono corrente",
-"pt": "Clique: mudar para o seu YC conectado via USB (Chrome, Edge), apenas o som atual",
-"k": "T"
-},
-{
 "fr": "Pas de YC branché : un YC73 virtuel répond",
 "g": "messages",
 "en": "No YC connected: a virtual YC73 answers",
@@ -11125,6 +11115,16 @@ window.YC_I18N_DATA = {
 "es": "Ningún YC conectado: responde un YC73 virtual",
 "it": "Nessuno YC collegato: risponde uno YC73 virtuale",
 "pt": "Nenhum YC conectado: um YC73 virtual responde",
+"k": "T"
+},
+{
+"fr": "Pas de YC branché : un YC73 virtuel répond. Clic : brancher votre YC (Chrome, Edge)",
+"g": "messages",
+"en": "No YC connected: a virtual YC73 answers. Click: connect your YC (Chrome, Edge)",
+"de": "Kein YC angeschlossen: ein virtueller YC73 antwortet. Klick: Ihren YC anschließen (Chrome, Edge)",
+"es": "Ningún YC conectado: responde un YC73 virtual. Clic: conectar tu YC (Chrome, Edge)",
+"it": "Nessuno YC collegato: risponde uno YC73 virtuale. Clic: collega il tuo YC (Chrome, Edge)",
+"pt": "Nenhum YC conectado: um YC73 virtual responde. Clique: conectar o seu YC (Chrome, Edge)",
 "k": "T"
 }
 ],
@@ -12165,13 +12165,13 @@ function updateConn() {
     else if (state.busy) { cls = 'busy'; label = name + ' · lecture…'; }
     else { cls = 'on'; label = name; }   // connecté : rien d'autre à dire, les réglages ne s'enregistrent que par STORE
   }
-  if (WEB && state.demo) { cls = 'off'; label = 'Pas de YC branché : un YC73 virtuel répond'; }   /* version web : voyant rouge en démo, vert seulement avec un vrai YC */
-  c.className = 'conn ' + cls + (!midi.connected && state.midiReady && state.settings.welcomed ? ' flash' : '');
+  if (WEB && state.demo) { cls = 'off'; label = 'Pas de YC branché : un YC73 virtuel répond. Clic : brancher votre YC (Chrome, Edge)'; }   /* version web : voyant rouge en démo, vert seulement avec un vrai YC */
+  c.className = 'conn ' + cls + ((!midi.connected && state.midiReady && state.settings.welcomed) || (WEB && state.demo) ? ' flash' : '');   /* version web : clignote pendant toute la démo */
   let db = $('#demoBtn'); if (!db) { db = el('button', { id: 'demoBtn', class: 'btn small demo-btn' }); c.after(db); db.addEventListener('click', () => (state.demo ? quitDemo() : enterDemo())); }
   db.hidden = !(state.demo || (!midi.connected && state.midiReady && state.settings.welcomed));
   db.textContent = state.demo && !WEB ? 'Mode démo ✕' : 'Mode démo'; db.classList.toggle('on', !!state.demo);   /* version web : pas de croix */
-  db.title = state.demo && WEB ? 'Clic : passer sur votre YC branché en USB (Chrome, Edge), le son en cours seulement' : state.demo ? 'Quitter le mode démo : vos données et votre vrai clavier reviennent' : 'Essayer YC Studio sans clavier : un YC73 virtuel répond (rien n’est enregistré)';   /* YC absent (ex. « Plus tard ») : le voyant clignote, un clic rouvre Connexions MIDI */
-  $('#connLabel').textContent = label; c.title = label + ' — clic : connexion MIDI';   // seul le voyant est affiché, le libellé passe en info-bulle
+  db.title = state.demo && WEB ? 'Pas de YC branché : un YC73 virtuel répond' : state.demo ? 'Quitter le mode démo : vos données et votre vrai clavier reviennent' : 'Essayer YC Studio sans clavier : un YC73 virtuel répond (rien n’est enregistré)';   /* YC absent (ex. « Plus tard ») : le voyant clignote, un clic rouvre Connexions MIDI */
+  $('#connLabel').textContent = label; c.title = WEB && state.demo ? label : label + ' — clic : connexion MIDI';   // seul le voyant est affiché, le libellé passe en info-bulle
   $('#btnHist').classList.toggle('empty', !state.undo.length && !state.redo.length);   // toujours cliquable : ouvre l'historique, même vide
   $('#btnHist').title = 'Historique — ' + (state.undo.length ? 'dernière action : ' + describeUndo(state.undo[state.undo.length - 1]) : 'rien à annuler') + ' (Ctrl+Z / Ctrl+Y)';
   if ($('#popover .hist-pop') && !$('#popover').hidden) openHistory();   /* rafraîchit l'historique seulement s'il est affiché */
@@ -15427,7 +15427,8 @@ document.addEventListener('keydown', (e) => {
   }
 });
 $('#search').addEventListener('input', (e) => { state.search = e.target.value; if (lcdMode() && state.search) openSets(true); renderPages(); });
-$('#conn').addEventListener('click', (e) => { if (!midi.connected) { e.stopPropagation(); closePopover(); openMidiWin(); } else openConnPopover(e); });
+$('#conn').addEventListener('click', (e) => { if (WEB && state.demo) { e.stopPropagation(); closePopover(); goLive(); return; }   /* version web : brancher le vrai YC */
+  if (!midi.connected) { e.stopPropagation(); closePopover(); openMidiWin(); } else openConnPopover(e); });
 $('#btnHist').addEventListener('click', openHistory);
 $('#btnStore').addEventListener('click', storeCurrent);
 $('#btnLib').addEventListener('click', () => toggleDrawer('lib'));
@@ -15518,7 +15519,7 @@ setInterval(() => { if (pending.size && !writing && midi.connected && !writesPau
   const start = clamp(Number(state.settings.lastIdx) || 0, 0, TOTAL - 1);
   state.sel = { kind: 'device', idx: start }; state.openPage = Math.floor(start / 8); rotStart = rotFor(state.openPage);
   renderPages(); renderEditor(); updateConn(); centerPage(state.openPage);
-  if (WEB) { state.midiReady = true; enterDemo(); return; }   /* version web : le YC virtuel répond d'office, lecture des 320 sons */
+  if (WEB) { state.midiReady = true; enterDemo(); autoLive(); return; }   /* version web : le YC virtuel répond d'office, lecture des 320 sons */
   try {
     await midi.init();
     if (state.settings.inId && midi.access.inputs.get(state.settings.inId)) midi.setInput(state.settings.inId);
@@ -15633,25 +15634,32 @@ async function enterDemo() {
   smLoadIndex();   /* Soundmondo fictif */
   state.settings.firstReadDone = false; firstRead();
 }
-function quitDemo() { if (WEB) return goLive(); location.reload(); }   /* version web : quitter la démo = essayer le vrai YC branché */
+function quitDemo() { if (WEB) return; location.reload(); }   /* version web : « Mode démo » n'est qu'un repère ; on branche le YC par le voyant */
 /* ======================= VERSION WEB : VRAI YC BRANCHÉ =======================
    Chrome / Edge, page https, autorisation MIDI du navigateur. Le son en cours seulement, en lecture et en écriture :
    pas de lecture des 320 sons, aucune écriture dans les mémoires du clavier (STORE grisé, midi.liveOnly). MIDI Control
    est mis sur On pendant la séance et remis à sa valeur d'origine en quittant la page (si le navigateur en laisse le temps). */
 var LIVE = false;   /* var : lu par ensurePage et readRange, qui peuvent tourner avant cette ligne */
-async function goLive() {
-  if (LIVE) return;
-  if (!navigator.requestMIDIAccess) return toast('Pour brancher un YC, ouvrez cette page dans Chrome ou Edge.', true);
+async function goLive(opt = {}) {   /* opt.quiet : connexion automatique à l'ouverture (MIDI déjà autorisé), sans message ni fenêtre */
+  if (LIVE || goLive.busy) return;
+  if (!navigator.requestMIDIAccess) { if (!opt.quiet) toast('Pour brancher un YC, ouvrez cette page dans Chrome ou Edge.', true); return; }
+  goLive.busy = true;
   const mock = window.__mockAccess;
   const free = () => { try { midi.setInput(null); midi.setOutput(null); } catch {} };   /* les ports sont repris à neuf */
-  const back = async (msg) => { free(); window.__mockAccess = mock; try { await midi.init(); } catch {} updateConn(); if (msg) toast(msg, true); };
+  const back = async (msg) => { free(); window.__mockAccess = mock; try { await midi.init(); } catch {} goLive.busy = false; updateConn(); if (msg && !opt.quiet) toast(msg, true); };
   free(); window.__mockAccess = null;
   try { await midi.init(); } catch (e) { return back('Accès MIDI refusé par le navigateur.'); }
-  if (!midi.input || !midi.output) return back('Aucun YC trouvé : branchez-le en USB, allumez-le, puis réessayez.');
-  setBusy('Recherche du YC…');
-  let d = null; try { d = await midi.findDevice(); } catch {}
-  setBusy(null);
-  if (d == null) return back('Aucun YC trouvé : branchez-le en USB, allumez-le, puis réessayez.');
+  let d = null;
+  if (midi.input && midi.output) { if (!opt.quiet) setBusy('Recherche du YC…'); try { d = await midi.findDevice(); } catch {} setBusy(null); }
+  if (d == null) {
+    if (opt.quiet) return back(null);
+    /* YC pas reconnu tout seul : la fenêtre Connexions MIDI montre les vrais ports vus par le navigateur */
+    d = await new Promise((res) => openMidiWin({
+      onDone: async () => { if (!midi.connected) return res(null); let x = null; try { x = await midi.findDevice(); } catch {} if (x == null) toast('Aucun YC trouvé : branchez-le en USB, allumez-le, puis réessayez.', true); res(x); },
+      onDemo: () => res(null) }));
+    if (d == null) return back(null);
+  }
+  goLive.busy = false;
   LIVE = true; midi.liveOnly = true; state.settings.dev = d;
   state.demo = false; document.body.classList.remove('demo-on'); document.body.classList.add('live-on');
   cancelFlag = true; readQueue = []; firstReading = false; cancelFlag = false;
@@ -15661,6 +15669,12 @@ async function goLive() {
   updateConn(); renderPages(); renderEditor();
   toast('YC connecté : le son en cours seulement, rien n’est enregistré dans le clavier.');
   await startSession();
+}
+/* version web : MIDI déjà autorisé lors d'une visite précédente → on cherche le YC sans rien demander, une fois la démo prête */
+async function autoLive() {
+  try { const p = await navigator.permissions.query({ name: 'midi', sysex: true }); if (p.state !== 'granted') return; } catch { return; }
+  for (let i = 0; i < 240 && (firstReading || !state.settings.firstReadDone); i++) await new Promise((r) => setTimeout(r, 500));
+  if (state.demo && !LIVE) goLive({ quiet: true });
 }
 /* vrai YC branché : lecture du seul son en cours, après un changement de Live Set demandé depuis l'écran */
 async function readActive(idx) {
@@ -15689,7 +15703,7 @@ async function firstRead() {
       firstReading = false; setTimeout(offerLang, 1500);
     }
 }
-function openMidiWin() {
+function openMidiWin(opt = {}) {   /* opt.onDone / opt.onDemo : version web, choix des ports d'un vrai YC */
   const body = el('div', { class: 'mw-body' });
   const draw = () => {
     const { inputs, outputs } = midi.ports();
@@ -15704,13 +15718,14 @@ function openMidiWin() {
       el('div', { class: 'mw-acts' },
         el('button', { class: 'btn small', onclick: async () => { try { const s = await midi.readSoundSafe('current'); toast('Connexion OK — son actuel : « ' + s.name + ' »'); } catch (e) { toast(e.message, true); } } }, 'Tester la connexion'),
         el('button', { class: 'btn small ghost', onclick: async () => { await retryMidi(); draw(); } }, 'Rechercher à nouveau'),
-        !midi.connected ? el('button', { class: 'btn small ghost', title: 'Essayer YC Studio sans clavier : un YC73 virtuel répond (rien n’est enregistré)', onclick: () => { state.settings.welcomed = true; closeModal(true); enterDemo(); } }, 'Mode démo') : null,
+        !midi.connected ? el('button', { class: 'btn small ghost', title: 'Essayer YC Studio sans clavier : un YC73 virtuel répond (rien n’est enregistré)', onclick: () => { state.settings.welcomed = true; closeModal(true); if (opt.onDemo) return opt.onDemo(); enterDemo(); } }, 'Mode démo') : null,
         el('span', { class: 'spacer' }),
         el('button', { class: 'btn small primary', onclick: done }, midi.connected ? 'Continuer' : 'Plus tard')));
   };
   const first = !state.settings.welcomed;
   async function done() {
     closeModal(true);
+    if (opt.onDone) return opt.onDone();
     if (first) { state.settings.welcomed = true; scheduleSave(); renderEditor(); updateConn(); }   /* YC absent : le voyant se met à clignoter tout de suite */
     if (!midi.connected || state.settings.firstReadDone) return;
     firstRead();   /* première utilisation, ou reprise après « Plus tard » : lecture de tout le clavier */
