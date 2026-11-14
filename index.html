@@ -2906,6 +2906,8 @@ if (typeof window !== 'undefined') window.YCFile = YCFile;
     // ---- Écriture d'un son (slot ou tampon courant) ----
     // only : liste d'identifiants de blocs à envoyer (écriture partielle) ; absent = son complet
     writeSound(sound, page, slot, only) {
+      /* version web branchée sur un vrai YC : seul le son en cours (tampon d'édition) peut être écrit, jamais une mémoire du clavier */
+      if (this.liveOnly && page !== 'current') return Promise.reject(new Error(window.I18N ? I18N.t('Disponible uniquement sur Windows') : 'Disponible uniquement sur Windows'));
       return this._enqueue(async () => {
         const pp = page === 'current' ? 0x7F : page, sl = page === 'current' ? 0x00 : slot;
         this._send(buildBulk(this.dev, 0x0E, pp, sl, [])); await sleep(this.delay);
@@ -2914,7 +2916,7 @@ if (typeof window !== 'undefined') window.YCFile = YCFile;
       });
     }
     async storeFlash() {
-      if (!this.storeToFlash) return;
+      if (!this.storeToFlash || this.liveOnly) return;
       return this._enqueue(async () => { this._send(buildBulk(this.dev, 0x0D, 0x00, 0x00, [])); await sleep(200); });
     }
   }
@@ -11064,6 +11066,46 @@ window.YC_I18N_DATA = {
 "it": "Archivio (.zip)",
 "pt": "Arquivo (.zip)",
 "k": "L"
+},
+{
+"fr": "Pour brancher un YC, ouvrez cette page dans Chrome ou Edge.",
+"g": "messages",
+"en": "To connect a YC, open this page in Chrome or Edge.",
+"de": "Um einen YC anzuschließen, öffnen Sie diese Seite in Chrome oder Edge.",
+"es": "Para conectar un YC, abre esta página en Chrome o Edge.",
+"it": "Per collegare uno YC, apri questa pagina in Chrome o Edge.",
+"pt": "Para conectar um YC, abra esta página no Chrome ou no Edge.",
+"k": "M"
+},
+{
+"fr": "Accès MIDI refusé par le navigateur.",
+"g": "messages",
+"en": "MIDI access denied by the browser.",
+"de": "MIDI-Zugriff vom Browser verweigert.",
+"es": "El navegador ha denegado el acceso MIDI.",
+"it": "Accesso MIDI negato dal browser.",
+"pt": "Acesso MIDI negado pelo navegador.",
+"k": "M"
+},
+{
+"fr": "Aucun YC trouvé : branchez-le en USB, allumez-le, puis réessayez.",
+"g": "messages",
+"en": "No YC found: connect it via USB, switch it on, then try again.",
+"de": "Kein YC gefunden: per USB anschließen, einschalten und erneut versuchen.",
+"es": "No se ha encontrado ningún YC: conéctalo por USB, enciéndelo y vuelve a intentarlo.",
+"it": "Nessuno YC trovato: collegalo via USB, accendilo e riprova.",
+"pt": "Nenhum YC encontrado: conecte-o via USB, ligue-o e tente novamente.",
+"k": "M"
+},
+{
+"fr": "YC connecté : le son en cours seulement, rien n’est enregistré dans le clavier.",
+"g": "messages",
+"en": "YC connected: current sound only, nothing is stored in the keyboard.",
+"de": "YC verbunden: nur der aktuelle Sound, im Keyboard wird nichts gespeichert.",
+"es": "YC conectado: solo el sonido actual, no se guarda nada en el teclado.",
+"it": "YC collegato: solo il suono corrente, nulla viene salvato nella tastiera.",
+"pt": "YC conectado: apenas o som atual, nada é salvo no teclado.",
+"k": "M"
 }
 ],
 "msgpx": {
@@ -11275,11 +11317,14 @@ const sys = window.host || {
    ce qui ne peut pas marcher dans une page reste affiché, grisé, avec la bulle « Disponible uniquement sur Windows » */
 const WEB = !!window.__ycWeb && !window.host;
 if (WEB && window.ycWeb) Object.assign(sys, window.ycWeb.sys({ ...sys }));
+/* visiteur déjà venu dans ce navigateur : les 320 sons du YC virtuel sont lus aussitôt, sans fenêtre de lecture.
+   Simple repère dans le stockage local ; s'il est bloqué (tous cookies refusés, navigation privée), c'est une première visite. */
+const WEB_SEEN = WEB && (() => { try { return localStorage.getItem('ycweb-seen') === '1'; } catch { return false; } })();
 let clipOK = !WEB;   /* ajout de langue par IA : seulement si le presse-papiers se lit tout seul (Chrome, Edge) */
 if (WEB && window.ycWeb) window.ycWeb.clip.then((ok) => { clipOK = ok; });
 const WIN_ONLY = 'Disponible uniquement sur Windows', WIN_CLIP = 'Disponible uniquement sur Windows, ou dans Chrome et Edge';
 /* élément grisé qui ne fait rien ; sa bulle dit pourquoi (pas d'attribut disabled : la bulle doit rester visible) */
-const winOnly = (node, why = WIN_ONLY) => { node.classList.add('win-only'); node.title = tt(why); node.setAttribute('aria-disabled', 'true'); node.addEventListener('click', (e) => { e.preventDefault(); e.stopImmediatePropagation(); }, true); if (node.tagName === 'INPUT') node.readOnly = true; return node; };
+const winOnly = (node, why = WIN_ONLY) => { node.title = tt(why); if (node.classList.contains('win-only')) return node; node.classList.add('win-only'); node.setAttribute('aria-disabled', 'true'); node.addEventListener('click', (e) => { e.preventDefault(); e.stopImmediatePropagation(); }, true); if (node.tagName === 'INPUT') node.readOnly = true; return node; };
 
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
@@ -12359,6 +12404,7 @@ async function onKeyboardSelect(idx) {
       monNote('synchronisé par PAGE + : retour en ' + slotLabel(orig) + (keep && !same ? ', son d’origine remis (retouches)' : ', son identique : rien à réécrire'));
     }
     currentSnd = keep;
+    if (LIVE && keep && !state.device[orig].sound) state.device[orig] = { sound: clone(keep), dirty: false };   /* vrai YC (version web) : rien n'était lu, le son en cours devient la copie */
     select({ kind: 'device', idx: orig }, { fromKeyboard: true });
     await syncWithEditBuffer(orig);
     toast('Synchronisé : Live Set ' + slotLabel(orig) + '.');
@@ -12582,6 +12628,7 @@ function updateStore() {
   const amb = !!state.ambig, on = editing() && !amb;   /* Live Set incertain : STORE grisé jusqu'à la réponse */
   b.disabled = !on; b.classList.toggle('armed', on);
   b.title = amb ? 'STORE bloqué : précise d’abord sur quel Live Set est le clavier' : on ? `Enregistrer le son dans le Live Set ${slotLabel(state.edit.idx)} (Ctrl+S)` : 'Rien à enregistrer : le son n’a pas été modifié';
+  if (LIVE) { winOnly(b); document.querySelectorAll('.fbtn.store, .pb.store, .store-w').forEach((x) => winOnly(x)); return; }   /* vrai YC (version web) : jamais d'écriture en mémoire */
   document.querySelectorAll('.fbtn.store, .pb.store, .store-w').forEach((x) => { x.classList.toggle('armed', on); x.classList.toggle('blocked', amb); const bt = x.tagName === 'BUTTON' ? x : x.querySelector('button'); if (bt) bt.disabled = amb || (!on && x.classList.contains('fbtn')); });
   if (isFacade()) document.querySelectorAll('.ls-btn.on').forEach((x) => { let m = x.querySelector('.mod'); if (on && !m) x.append(el('span', { class: 'mod edit' })); if (!on && m && m.classList.contains('edit')) m.remove(); });
 }
@@ -14718,6 +14765,7 @@ function readFirst(idx) { if (!state.busy) return readRange([idx]); readQueue = 
 const fresh = new Set();
 function ensurePage(p, first) {
   if (!midi.connected || p < 0) return;
+  if (LIVE) { if (first != null && !state.device[first].sound) readActive(first); return; }   /* vrai YC (version web) : le son en cours seulement */
   const list = [];
   if (first != null) list.push(first);
   for (let s = 0; s < 8; s++) list.push(p * 8 + s);
@@ -14727,7 +14775,7 @@ function ensurePage(p, first) {
   readQueue = [...todo, ...readQueue.filter((i) => !todo.includes(i))];
 }
 async function readRange(list, opt = {}) {
-  if (!midi.connected) return;
+  if (!midi.connected || LIVE) return;   /* vrai YC (version web) : jamais de lecture de plusieurs sons */
   if (state.busy) { readQueue.push(...list.filter((i) => !readQueue.includes(i))); return; }
   cancelFlag = false; let ok = 0, done = 0;
   readQueue = list.slice();
@@ -15470,6 +15518,7 @@ async function startSession(opt = {}) {
   /* Device Number : si le YC ne répond pas au numéro réglé, on cherche le bon et on le garde */
   try { const d = await midi.findDevice(); if (d != null && d !== state.settings.dev) { state.settings.dev = d; scheduleSave(); toast('Device Number du YC trouvé : ' + (d + 1) + ' (réglé dans l’appli).'); } } catch {}
   const idx = await findCurrentSlot().finally(() => { state.starting = false; });
+  if (LIVE && !currentAmbig) currentAmbig = [idx, -1];   /* vrai YC (version web), rien de lu : pas de devinette, on demande PAGE + */
   /* MIDI Control reste comme il est pendant la synchro par PAGE + : sinon le YC diffuse toute sa façade au changement de set */
   if (currentAmbig) {
     state.liveAfterSync = true;
@@ -15520,7 +15569,7 @@ function installDemoYC() {
   window.__mockIn=(arr,raw)=>{ const m=new Uint8Array(arr); if(!raw && m[0]===0xF0&&(m[2]&0xF0)===0x10){ const b=YC.BLOCKS.find(x=>x.ah===m[6]&&x.am===m[7]); if(b) for(let i=9;i<m.length-1;i++) editBuf().blocks[b.id][m[8]+i-9]=m[i]; } if(inHandler) inHandler({data:m}); };
   const blockOf=(ah,am)=>YC.BLOCKS.find(b=>b.ah===ah&&b.am===am);
   /* DEMO_LAT : attente avant chaque réponse de son, pour que la lecture des 320 sons dure ~39 s comme sur le vrai YC */
-  const DEMO_LAT=WEB?50:105;   /* version web : lecture des 320 sons deux fois plus courte (~20 s) */ const reply=(arr,lat=0)=>arr.forEach((m,k)=>setTimeout(()=>inHandler&&inHandler({data:new Uint8Array(m)}),lat+2+k));
+  const DEMO_LAT=WEB_SEEN?0:WEB?50:105;   /* version web : lecture des 320 sons deux fois plus courte (~20 s), immédiate pour un visiteur déjà venu */ const reply=(arr,lat=0)=>arr.forEach((m,k)=>setTimeout(()=>inHandler&&inHandler({data:new Uint8Array(m)}),lat+2+k));
   const sys={0x0C:0}; const meqM={0x00:0x43,0x08:0x3E,0x09:0x1C,0x10:0x45,0x13:1}; window.__mockMeq=meqM;
   const out={id:'o1',name:'YC73 (démo)',state:'connected',send(m){ m=Array.from(m); sent.push(m);
     const st=m[0]&0xF0;
@@ -15563,7 +15612,40 @@ async function enterDemo() {
   smLoadIndex();   /* Soundmondo fictif */
   state.settings.firstReadDone = false; firstRead();
 }
-function quitDemo() { location.reload(); }   /* on recharge : les vraies données reviennent du disque */
+function quitDemo() { if (WEB) return goLive(); location.reload(); }   /* version web : quitter la démo = essayer le vrai YC branché */
+/* ======================= VERSION WEB : VRAI YC BRANCHÉ =======================
+   Chrome / Edge, page https, autorisation MIDI du navigateur. Le son en cours seulement, en lecture et en écriture :
+   pas de lecture des 320 sons, aucune écriture dans les mémoires du clavier (STORE grisé, midi.liveOnly). MIDI Control
+   est mis sur On pendant la séance et remis à sa valeur d'origine en quittant la page (si le navigateur en laisse le temps). */
+var LIVE = false;   /* var : lu par ensurePage et readRange, qui peuvent tourner avant cette ligne */
+async function goLive() {
+  if (LIVE) return;
+  if (!navigator.requestMIDIAccess) return toast('Pour brancher un YC, ouvrez cette page dans Chrome ou Edge.', true);
+  const mock = window.__mockAccess;
+  const free = () => { try { midi.setInput(null); midi.setOutput(null); } catch {} };   /* les ports sont repris à neuf */
+  const back = async (msg) => { free(); window.__mockAccess = mock; try { await midi.init(); } catch {} updateConn(); if (msg) toast(msg, true); };
+  free(); window.__mockAccess = null;
+  try { await midi.init(); } catch (e) { return back('Accès MIDI refusé par le navigateur.'); }
+  if (!midi.input || !midi.output) return back('Aucun YC trouvé : branchez-le en USB, allumez-le, puis réessayez.');
+  setBusy('Recherche du YC…');
+  let d = null; try { d = await midi.findDevice(); } catch {}
+  setBusy(null);
+  if (d == null) return back('Aucun YC trouvé : branchez-le en USB, allumez-le, puis réessayez.');
+  LIVE = true; midi.liveOnly = true; state.settings.dev = d;
+  state.demo = false; document.body.classList.remove('demo-on'); document.body.classList.add('live-on');
+  cancelFlag = true; readQueue = []; firstReading = false; cancelFlag = false;
+  state.device.forEach((x) => { x.sound = null; x.dirty = false; }); deviceRaw.fill(null); pending.clear(); state.undo = []; state.redo = [];
+  state.settings.firstReadDone = true; currentAmbig = null;
+  const st = $('#btnStore'); if (st) winOnly(st);
+  updateConn(); renderPages(); renderEditor();
+  toast('YC connecté : le son en cours seulement, rien n’est enregistré dans le clavier.');
+  await startSession();
+}
+/* vrai YC branché : lecture du seul son en cours, après un changement de Live Set demandé depuis l'écran */
+async function readActive(idx) {
+  await new Promise((r) => setTimeout(r, 200));
+  try { const s = await midi.readSoundSafe('current'); if (curDeviceIdx() !== idx) return; state.device[idx] = { sound: s, dirty: false }; renderPages(); renderEditor(); } catch (e) { toast(e.message || String(e), true); }
+}   /* on recharge : les vraies données reviennent du disque */
 /* première lecture complète du clavier, dans une fenêtre qui montre l'avancement ; reprise automatiquement
    à la première connexion si l'utilisateur avait choisi « Plus tard » */
 let firstReading = false;
@@ -15576,13 +15658,13 @@ async function firstRead() {
       el('p', { class: 'mw-hint' }, 'YC Studio lit les 320 Live Sets de votre YC pour les afficher. Patientez quelques minutes ; vous pouvez jouer pendant ce temps.'),
       el('div', { class: 'pg-bar rw-bar' }, bar), lbl,
       el('div', { class: 'mw-acts' }, el('span', { class: 'spacer' }), el('button', { class: 'btn small ghost', onclick: () => { closeModal(true); $('#progress').hidden = !state.busy; } }, 'Continuer en arrière-plan')));
-    readWin = { bar, lbl, box }; modal(box);
+    if (!WEB_SEEN) { readWin = { bar, lbl, box }; modal(box); }   /* visiteur déjà venu : lecture discrète */
     try { lbl.textContent = I18N.t('Recherche du YC…'); await startSession({ full: true }); } catch (e) { toast(e.message || String(e), true); } finally {
       const open = readWin && readWin.box.isConnected && !$('#modalBack').hidden; readWin = null; renderEditor();
       if (open) closeModal(true);
       const n = state.device.filter((d) => d.sound).length;
-      toast(n >= TOTAL ? 'Les 320 Live Sets sont lus : YC Studio est prêt.' : n + ' Live Sets lus sur 320.');
-      if (n >= TOTAL) { state.settings.firstReadDone = true; scheduleSave(); }
+      if (!WEB_SEEN) toast(n >= TOTAL ? 'Les 320 Live Sets sont lus : YC Studio est prêt.' : n + ' Live Sets lus sur 320.');
+      if (n >= TOTAL) { state.settings.firstReadDone = true; scheduleSave(); if (WEB) try { localStorage.setItem('ycweb-seen', '1'); } catch {} }
       firstReading = false; setTimeout(offerLang, 1500);
     }
 }
