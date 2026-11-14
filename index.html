@@ -11106,6 +11106,26 @@ window.YC_I18N_DATA = {
 "it": "YC collegato: solo il suono corrente, nulla viene salvato nella tastiera.",
 "pt": "YC conectado: apenas o som atual, nada é salvo no teclado.",
 "k": "M"
+},
+{
+"fr": "Clic : passer sur votre YC branché en USB (Chrome, Edge), le son en cours seulement",
+"g": "messages",
+"en": "Click: switch to your YC connected via USB (Chrome, Edge), current sound only",
+"de": "Klick: zu Ihrem per USB angeschlossenen YC wechseln (Chrome, Edge), nur der aktuelle Sound",
+"es": "Clic: pasar a tu YC conectado por USB (Chrome, Edge), solo el sonido actual",
+"it": "Clic: passa al tuo YC collegato via USB (Chrome, Edge), solo il suono corrente",
+"pt": "Clique: mudar para o seu YC conectado via USB (Chrome, Edge), apenas o som atual",
+"k": "T"
+},
+{
+"fr": "Pas de YC branché : un YC73 virtuel répond",
+"g": "messages",
+"en": "No YC connected: a virtual YC73 answers",
+"de": "Kein YC angeschlossen: ein virtueller YC73 antwortet",
+"es": "Ningún YC conectado: responde un YC73 virtual",
+"it": "Nessuno YC collegato: risponde uno YC73 virtuale",
+"pt": "Nenhum YC conectado: um YC73 virtual responde",
+"k": "T"
 }
 ],
 "msgpx": {
@@ -12145,11 +12165,12 @@ function updateConn() {
     else if (state.busy) { cls = 'busy'; label = name + ' · lecture…'; }
     else { cls = 'on'; label = name; }   // connecté : rien d'autre à dire, les réglages ne s'enregistrent que par STORE
   }
+  if (WEB && state.demo) { cls = 'off'; label = 'Pas de YC branché : un YC73 virtuel répond'; }   /* version web : voyant rouge en démo, vert seulement avec un vrai YC */
   c.className = 'conn ' + cls + (!midi.connected && state.midiReady && state.settings.welcomed ? ' flash' : '');
   let db = $('#demoBtn'); if (!db) { db = el('button', { id: 'demoBtn', class: 'btn small demo-btn' }); c.after(db); db.addEventListener('click', () => (state.demo ? quitDemo() : enterDemo())); }
   db.hidden = !(state.demo || (!midi.connected && state.midiReady && state.settings.welcomed));
-  db.textContent = state.demo ? 'Mode démo ✕' : 'Mode démo'; db.classList.toggle('on', !!state.demo);
-  db.title = state.demo ? 'Quitter le mode démo : vos données et votre vrai clavier reviennent' : 'Essayer YC Studio sans clavier : un YC73 virtuel répond (rien n’est enregistré)';   /* YC absent (ex. « Plus tard ») : le voyant clignote, un clic rouvre Connexions MIDI */
+  db.textContent = state.demo && !WEB ? 'Mode démo ✕' : 'Mode démo'; db.classList.toggle('on', !!state.demo);   /* version web : pas de croix */
+  db.title = state.demo && WEB ? 'Clic : passer sur votre YC branché en USB (Chrome, Edge), le son en cours seulement' : state.demo ? 'Quitter le mode démo : vos données et votre vrai clavier reviennent' : 'Essayer YC Studio sans clavier : un YC73 virtuel répond (rien n’est enregistré)';   /* YC absent (ex. « Plus tard ») : le voyant clignote, un clic rouvre Connexions MIDI */
   $('#connLabel').textContent = label; c.title = label + ' — clic : connexion MIDI';   // seul le voyant est affiché, le libellé passe en info-bulle
   $('#btnHist').classList.toggle('empty', !state.undo.length && !state.redo.length);   // toujours cliquable : ouvre l'historique, même vide
   $('#btnHist').title = 'Historique — ' + (state.undo.length ? 'dernière action : ' + describeUndo(state.undo[state.undo.length - 1]) : 'rien à annuler') + ' (Ctrl+Z / Ctrl+Y)';
